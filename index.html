@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Title</title>
+    <meta charset="utf-8">
+    <link rel="stylesheet" type="text/css" href="css/slides.css"/>
+  </head>
+  <body>
+    <textarea id="source">
+
+class: center, middle
+
+# Real-time course data synchronization in Sakai
+.footnote[Texas State University]
+
+---
+
+.center[
+# Course Management in Sakai
+]
+
+.bigbox.no-border[
+- Course Management API (/edu-services/cm-service)
+- CourseManagementService (read-only) and CourseManagementAdministration
+- Site info, Roster, Worksite Setup, Section Info
+- Very helpful documentation at [Sakai Wiki](https://confluence.sakaiproject.org/display/SAKDEV/Course+Management+Integration)
+]
+
+---
+
+class: center
+
+# Course Management Model
+![Default-aligned image](images/coursemanagement.svg)
+
+???
+Work backwards from Enrollment
+Get student enrollments from registrar, report final grades back to registrar
+
+---
+
+class: center
+
+# Courses at Texas State
+
+![Default-aligned image](images/txstate.svg)
+
+???
+AcademicSession = Semester (Fall, Spring, Summer I and II)
+CanonicalCourse = Base course (e.g. US1100)
+CourseOffering = Course for a semester (e.g. US1100 Fall 2016)
+EnrollmentSet = Single section of a course (e.g. US1100 Fall 2016 Section 12)
+Enrollment = Student's enrollment in a section
+
+---
+
+.center[
+# Current integration methods
+]
+
+.bigbox.no-border[
+- Quartz job to populate tables
+- Re-implementation of cm-service
+- Hibernate re-mapping
+- Custom web services
+]
+
+---
+
+.left-column[
+  ### Cmprovider
+]
+
+.right-column[
+.bigbox[
+- RESTful API
+- Uses entity provider
+- Endpoints found at /direct/cm-*
+- Wrapper around CourseManagementService and CourseManagementAdministration
+- POST or PUT for update/create
+]
+]
+
+---
+
+.left-column[
+  ### Cmprovider
+  #### Academic Session
+]
+
+.right-column[
+  .label[/direct/cm-academic-session]
+  .box[
+- A time or schedule-based institutional context
+- Usually for a semester, quarter, or term
+- Worksite setup when creating a new course site
+  ]
+  .label[Fields]
+  .classdef[
+  | Field       | Type   | Notes | 
+  | ----------- | ------ | ----- |
+  | eid         | String | Match with term code for your institution |
+  | title       | String | |
+  | description | String | |
+  | startDate   | Date   | YYYY-MM-DD |
+  | endDate     | Date   | YYYY-MM-DD |
+  ]
+]
+
+---
+
+.left-column[
+  ### Cmprovider
+  #### Academic Session
+  #### Canonical Course
+]
+
+.right-column[
+  .label[/direct/cm-canonical-course]
+  .box[
+- A course or piece of curriculum that is repeated.
+  ]
+  .label[Fields]
+  .classdef[
+  | Field       | Type   | Notes | 
+  | ----------- | ------ | ----- |
+  | eid         | String | Match with course code, e.g. CS101 |
+  | title       | String | |
+  | description | String | &nbsp; |
+  ]
+]
+
+---
+
+.left-column[
+  ### Cmprovider
+  #### Academic Session
+  #### Canonical Course
+  #### Course Offering
+]
+
+.right-column[
+  .label[/direct/cm-course-offering]
+  .box[
+- Instance of a Canonical Course for an Academic Session  
+  ]
+  .label[Fields]
+  .classdef[
+  | Field           | Type            | Notes | 
+  | -----------     | ------          | ----- |
+  | eid             | String          | |
+  | title           | String          | |
+  | description     | String          | |
+  | academicSession | String          | eid of AcademicSession |
+  | canonicalCourse | String          | eid of CanonicalCourse |
+  | status          | String          | |
+  | startDate       | Date            | YYYY-MM-DD |
+  | endDate         | Date            | YYYY-MM-DD |
+  ]
+]
+
+---
+
+.left-column[
+  ### Cmprovider
+  #### Academic Session
+  #### Canonical Course
+  #### Course Offering
+  #### Course Set
+]
+
+.right-column[
+  .label[/direct/cm-course-set]
+  .box[
+- A collection of Canonical Courses and Course Offerings
+- Could be used to describe majors or departments
+  ]
+  .label[Fields]
+  .classdef[
+  | Field       | Type      | Notes | 
+  | ----------- | ------    | ----- |
+  | eid         | String    | Match with course code, e.g. CS101 |
+  | title       | String    | |
+  | description | String    | |
+  | category    | String    | |
+  | parent      | CourseSet | &nbsp; |
+  ]
+]
+
+---
+
+.left-column[
+  ### Cmprovider
+  #### Academic Session
+  #### Canonical Course
+  #### Course Offering
+  #### Course Set
+  #### Enrollment
+]
+
+.right-column[
+  .label[/direct/cm-enrollment]
+  .box[
+- Relationship between a student and something that gets a final grade
+- Students with an enrollment are automatically added to sites
+- Status shows in roster tool
+  ]
+  .label[Fields]
+  .classdef[
+  | Field         | Type          | Notes | 
+  | -----------   | ------        | ----- |
+  | userId        | String        | eid, not sakai user id |
+  | enrollmentSet | EnrollmentSet | String    |
+  | status        | String        | |
+  | credits       | String        | |
+  | gradingScheme | String        | |
+  | dropDate      | Date          | YYYY-MM-DD |
+  | dropped       | Boolean       | &nbsp; |
+  ]
+]
+
+---
+
+.left-column[
+  ### Cmprovider
+  #### Academic Session
+  #### Canonical Course
+  #### Course Offering
+  #### Course Set
+  #### Enrollment
+  #### Membership
+]
+
+.right-column[
+  .label[via cm-course-set, cm-course-offering, cm-section]
+  .box[
+- Associates a user with a role in a member container 
+- Containers are CourseSet, CourseOffering, or Section
+- Used by CourseManagementGroupProvider to assign groups and roles to users in sites
+  ]
+  .label[Fields]
+  .classdef[
+  | Field           | Type          | Notes | 
+  | -----------     | ------        | ----- |
+  | userId          | String        | eid, not sakai user id |
+  | memberContainer | String        | eid of container |
+  | role            | String        | |
+  | status          | String        | &nbsp; |
+  ]
+]
+
+---
+
+.left-column[
+  ### Cmprovider
+  #### Academic Session
+  #### Canonical Course
+  #### Course Offering
+  #### Course Set
+  #### Enrollment
+  #### Membership
+  #### Enrollment Set
+]
+
+.right-column[
+  .label[/direct/cm-enrollment-set]
+  .box[
+- Collection of enrollments for a CourseOffering or Section
+- Added to a site to automatically add/drop users based on status
+  ]
+  .label[Fields]
+  .classdef[
+  | Field               | Type         | Notes | 
+  | -----------         | ------       | ----- |
+  | eid                 | String       | |
+  | title               | String       | |
+  | description         | String       | |
+  | category            | String       | |
+  | defaultCredits      | String       | |
+  | courseOffering      | String       | |
+  | officialInstructors | List &lt; String &gt; | &nbsp; |
+
+  ]
+]
+
+---
+
+.left-column[
+  ### Cmprovider
+  #### Academic Session
+  #### Canonical Course
+  #### Course Offering
+  #### Course Set
+  #### Enrollment
+  #### Membership
+  #### Enrollment Set
+  #### Section
+]
+
+.right-column[
+  .label[/direct/cm-section]
+  .box[
+- A cohort of group within a Course Offering
+- Has Memberships for roles
+  ]
+  .label[Fields]
+  .classdef[
+  | Field          | Type    | Notes | 
+  | -----------    | ------  | ----- |
+  | eid            | String  | |
+  | title          | String  | |
+  | description    | String  | |
+  | category       | String  | |
+  | courseOffering | String  | |
+  | enrollmentSet  | String  | |
+  | maxSize        | Integer | |
+  | parent         | String  | eid of another Section |
+
+  ]
+]
+
+---
+
+class: center, middle
+
+# Future Improvements
+
+---
+.left-column[
+  ### JAX RS
+]
+
+.right-column[
+.bigbox[
+- Java API specification for RESTful web services
+- Different implementations (e.g. Jersey, CXF)
+- More flexibility
+- Easier to add custom actions
+- Annotations (JAX-RS) vs. Inheritence (Entity Provider)
+]
+]
+
+---
+
+.left-column[
+  ### JAX RS
+ #### Auto-registration
+]
+
+.right-column[
+  .label[Entity Provider]
+  .box[
+- Auto-registration via subclasses
+  ]
+  ```java
+public class AcademicSessionEntityProvider implements RESTful, CoreEntityProvider, AutoRegisterEntityProvider {
+    public String getEntityPrefix() {
+        return "cm-academic-session";
+    }
+...
+}
+  ```
+
+  .label[JAX-RS]
+  .box[
+- Auto-registration via annotations (@Path, @GET, @POST, etc.)
+  ]
+  ```java
+@Path("cm-academic-session")
+public class AcademicSessionEntityProvider {
+...
+}
+  ```
+]
+
+---
+
+.left-column[
+  ### JAX RS
+ #### Auto-registration
+ #### Routing
+]
+
+.right-column[
+  
+  ### Similar for routing
+  
+  .label[Entity Provider]
+
+  ```java
+public class AcademicSessionEntityProvider implements RESTful, CoreEntityProvider, AutoRegisterEntityProvider {
+    public Object getEntity(EntityReference ref) { ... }
+
+    public String updateEntity(Object entity) { ... }
+}
+  ```
+
+  .label[JAX-RS]
+
+  ```java
+@Path("cm-academic-session")
+public class AcademicSessionEntityProvider {
+    @GET
+    public AcademicSessionData getAcademicSession(String eid) { ... }
+
+    @POST
+    @PUT
+    public void createOrUpdateAcademicSession(AcademicSessionData session) { ... }
+}
+  ```
+]
+
+---
+
+.left-column[
+  ### JAX RS
+ #### Auto-registration
+ #### Routing
+ #### Validation
+]
+
+.right-column[
+Some stuff on validation annotations
+]
+
+---
+
+.left-column[
+### JAX RS
+ #### Auto-registration
+#### Routing
+#### Validation
+#### Error Handling
+]
+
+.right-column[
+Exception mapping
+
+  .classdef[
+    | Java Exception           | Status Code |
+    | --------------           | ----------- |
+    | IllegalArgumentException | 400 |
+    | SecurityException        | 403 |
+    | IdNotFoundException      | 404 |
+    | other exceptions         | 500 |
+
+  ]
+]
+
+---
+
+.left-column[
+### JAX RS
+ #### Auto-registration
+#### Routing
+#### Validation
+#### Error Handling
+#### Custom Response
+]
+
+.right-column[
+Example of custom response in JAX-RS
+]
+---
+
+.left-column[
+### JAX RS
+ #### Auto-registration
+#### Routing
+#### Validation
+#### Error Handling
+#### Custom Response
+#### Documentation
+]
+
+.right-column[
+- Code is more self-documenting
+- Standard spec makes it easy to generate API docs
+- [Swagger](https://github.com/swagger-api/swagger-ui)
+
+![Default-aligned image](images/swagger.png)
+.right.footnote[Swagger demo screenshot]
+]
+
+---
+
+.center[
+# Updates via PATCH
+]
+
+```json
+{
+  "dropped": true,
+  "dropDate": "2016-05-24"
+}
+```
+
+instead of
+
+```json
+{ 
+  "userId": "crs142",
+  "enrollmentSet": "term1.CS101.1",
+  "status": "true",
+  "credits": "03:00:00",
+  "gradingScheme": "noscheme",
+  "dropped": true,
+  "dropDate": "2016-05-24"
+}
+```
+---
+
+class: center, middle
+
+# How do we use cmprovider?
+
+    </textarea>
+    <script src="js/remark-0.13.min.js">
+    </script>
+    <script>
+      var slideshow = remark.create({ 
+        ratio: '16:9',
+        highlightStyle: 'sunburst'
+      });
+    </script>
+  </body>
+</html>
