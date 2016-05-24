@@ -1,0 +1,186 @@
+diff --git a/cmprovider/pom.xml b/cmprovider/pom.xml
+index 0f3099f..31cf345 100644
+--- a/cmprovider/pom.xml
++++ b/cmprovider/pom.xml
+@@ -4,13 +4,14 @@
+   <parent>
+     <groupId>org.sakaiproject</groupId>
+     <artifactId>master</artifactId>
+-    <version>12-SNAPSHOT</version>
++    <version>10.7</version>
+     <relativePath>../master/pom.xml</relativePath>
+   </parent>
+
+   <name>Course Management Provider</name>
+   <groupId>org.sakaiproject.cmprovider</groupId>
+   <artifactId>cmprovider</artifactId>
++  <version>10.7</version>
+   <organization>
+       <name>Sakai Project</name>
+       <url>http://sakaiproject.org/</url>
+@@ -59,6 +60,7 @@
+     <dependency>
+       <groupId>org.apache.commons</groupId>
+       <artifactId>commons-lang3</artifactId>
++      <version>3.4</version>
+     </dependency>
+     <dependency>
+       <groupId>commons-logging</groupId>
+diff --git a/edu-services/cm-service/cm-api/api/src/java/org/sakaiproject/coursemanagement/api/CourseManagementAdministration.java b/edu-services/cm-service/cm-api/api/src/java/org/sakaiproject/coursemanagement/api/CourseManagementAdministration.java
+index fcfceb2..81c7469 100644
+--- a/edu-services/cm-service/cm-api/api/src/java/org/sakaiproject/coursemanagement/api/CourseManagementAdministration.java
++++ b/edu-services/cm-service/cm-api/api/src/java/org/sakaiproject/coursemanagement/api/CourseManagementAdministration.java
+@@ -262,6 +262,20 @@ public interface CourseManagementAdministration {
+ 			String enrollmentStatus, String credits, String gradingScheme);
+ 
+ 	/**
++	 * Adds an Enrollment to an EnrollmentSet.  If the user is already enrolled in the
++	 * EnrollmentSet, the Enrollment record is updated for the user.
++	 * 
++	 * @param userId
++	 * @param enrollmentSetEid
++	 * @param enrollmentStatus
++	 * @param credits
++	 * @param gradingScheme
++	 * @param dropDate
++	 */
++	public Enrollment addOrUpdateEnrollment(String userId, String enrollmentSetEid,
++			String enrollmentStatus, String credits, String gradingScheme, Date dropDate);
++
++	/**
+ 	 * Removes an Enrollment from an EnrollmentSet by setting the Enrollment to
+ 	 * dropped=true.
+ 	 * 
+diff --git a/edu-services/cm-service/cm-api/api/src/java/org/sakaiproject/coursemanagement/api/Enrollment.java b/edu-services/cm-service/cm-api/api/src/java/org/sakaiproject/coursemanagement/api/Enrollment.java
+index 9efdc58..866d24e 100644
+--- a/edu-services/cm-service/cm-api/api/src/java/org/sakaiproject/coursemanagement/api/Enrollment.java
++++ b/edu-services/cm-service/cm-api/api/src/java/org/sakaiproject/coursemanagement/api/Enrollment.java
+@@ -21,6 +21,8 @@
+ 
+ package org.sakaiproject.coursemanagement.api;
+ 
++import java.util.Date;
++
+ /**
+  * The official relationship of a student to something that gets a final grade
+  * (or equivalent).
+@@ -46,4 +48,6 @@ public interface Enrollment {
+ 	public boolean isDropped();
+ 	public void setDropped(boolean dropped);
+ 
++	public Date getDropDate();
++	public void setDropDate(Date dropDate);
+ }
+diff --git a/edu-services/cm-service/cm-impl/hibernate-impl/hibernate/src/hibernate/org/sakaiproject/coursemanagement/impl/EnrollmentCmImpl.hbm.xml b/edu-services/cm-service/cm-impl/hibernate-impl/hibernate/src/hibernate/org/sakaiproject/coursemanagement/impl/EnrollmentCmImpl.hbm.xml
+index 1dd0612..712f208 100644
+--- a/edu-services/cm-service/cm-impl/hibernate-impl/hibernate/src/hibernate/org/sakaiproject/coursemanagement/impl/EnrollmentCmImpl.hbm.xml
++++ b/edu-services/cm-service/cm-impl/hibernate-impl/hibernate/src/hibernate/org/sakaiproject/coursemanagement/impl/EnrollmentCmImpl.hbm.xml
+@@ -25,6 +25,7 @@
+ 		<property name="credits" column="CREDITS" type="string" not-null="true" />
+ 		<property name="gradingScheme" column="GRADING_SCHEME" type="string" not-null="true" />
+ 		<property name="dropped" column="DROPPED" type="boolean" />
++		<property name="dropDate" type="date" column="DROP_DATE" />
+ 
+ 		<many-to-one name="enrollmentSet" column="ENROLLMENT_SET" unique-key="CM_ENR" index="CM_ENR_ENR_SET_IDX" class="org.sakaiproject.coursemanagement.impl.EnrollmentSetCmImpl" />
+ 
+diff --git a/edu-services/cm-service/cm-impl/hibernate-impl/hibernate/src/java/org/sakaiproject/coursemanagement/impl/EnrollmentCmImpl.java b/edu-services/cm-service/cm-impl/hibernate-impl/hibernate/src/java/org/sakaiproject/coursemanagement/impl/EnrollmentCmImpl.java
+index bd85fb5..7a29f80 100644
+--- a/edu-services/cm-service/cm-impl/hibernate-impl/hibernate/src/java/org/sakaiproject/coursemanagement/impl/EnrollmentCmImpl.java
++++ b/edu-services/cm-service/cm-impl/hibernate-impl/hibernate/src/java/org/sakaiproject/coursemanagement/impl/EnrollmentCmImpl.java
+@@ -21,6 +21,7 @@
+ package org.sakaiproject.coursemanagement.impl;
+ 
+ import java.io.Serializable;
++import java.util.Date;
+ 
+ import org.sakaiproject.coursemanagement.api.Enrollment;
+ import org.sakaiproject.coursemanagement.api.EnrollmentSet;
+@@ -36,15 +37,21 @@ public class EnrollmentCmImpl extends AbstractPersistentCourseManagementObjectCm
+ 	private String credits;
+ 	private String gradingScheme;
+ 	private boolean dropped;
++	private Date dropDate;
+ 	
+ 	public EnrollmentCmImpl() {}
+ 	
+ 	public EnrollmentCmImpl(String userId, EnrollmentSet enrollmentSet, String enrollmentStatus, String credits, String gradingScheme) {
++		this(userId, enrollmentSet, enrollmentStatus, credits, gradingScheme, null);		
++	}
++	
++	public EnrollmentCmImpl(String userId, EnrollmentSet enrollmentSet, String enrollmentStatus, String credits, String gradingScheme, Date dropDate) {
+ 		this.userId = userId;
+ 		this.enrollmentSet = enrollmentSet;
+ 		this.enrollmentStatus = enrollmentStatus;
+ 		this.credits = credits;
+ 		this.gradingScheme = gradingScheme;
++		this.dropDate = dropDate;
+ 	}
+ 	
+ 	public String getUserId() {
+@@ -88,4 +95,12 @@ public class EnrollmentCmImpl extends AbstractPersistentCourseManagementObjectCm
+ 	public void setDropped(boolean dropped) {
+ 		this.dropped = dropped;
+ 	}	
++
++	public Date getDropDate() {
++		return dropDate;
++	}
++
++	public void setDropDate(Date dropDate) {
++		this.dropDate = dropDate;
++	}
+ }
+diff --git a/edu-services/cm-service/cm-impl/hibernate-impl/impl/src/java/org/sakaiproject/coursemanagement/impl/CourseManagementAdministrationHibernateImpl.java b/edu-services/cm-service/cm-impl/hibernate-impl/impl/src/java/org/sakaiproject/coursemanagement/impl/CourseManagementAdministrationHibernateImpl.java
+index de0ed7d..70a7dd5 100644
+--- a/edu-services/cm-service/cm-impl/hibernate-impl/impl/src/java/org/sakaiproject/coursemanagement/impl/CourseManagementAdministrationHibernateImpl.java
++++ b/edu-services/cm-service/cm-impl/hibernate-impl/impl/src/java/org/sakaiproject/coursemanagement/impl/CourseManagementAdministrationHibernateImpl.java
+@@ -300,6 +300,10 @@ public class CourseManagementAdministrationHibernateImpl extends
+ 	}
+ 
+ 	public Enrollment addOrUpdateEnrollment(String userId, String enrollmentSetEid, String enrollmentStatus, String credits, String gradingScheme) {
++		return addOrUpdateEnrollment(userId, enrollmentSetEid, enrollmentStatus, credits, gradingScheme, null);
++	}
++
++	public Enrollment addOrUpdateEnrollment(String userId, String enrollmentSetEid, String enrollmentStatus, String credits, String gradingScheme, Date dropDate) {
+ 		EnrollmentCmImpl enrollment = null;
+ 		
+ 		List enrollments = getHibernateTemplate().findByNamedQueryAndNamedParam("findEnrollment",
+@@ -307,7 +311,7 @@ public class CourseManagementAdministrationHibernateImpl extends
+ 				new Object[] {enrollmentSetEid, userId});
+ 		if(enrollments.isEmpty()) {
+ 			EnrollmentSet enrollmentSet = (EnrollmentSet)getObjectByEid(enrollmentSetEid, EnrollmentSetCmImpl.class.getName());
+-			enrollment = new EnrollmentCmImpl(userId, enrollmentSet, enrollmentStatus, credits, gradingScheme);
++			enrollment = new EnrollmentCmImpl(userId, enrollmentSet, enrollmentStatus, credits, gradingScheme, dropDate);
+ 			enrollment.setCreatedBy(authn.getUserEid());
+ 			enrollment.setCreatedDate(new Date());
+ 			getHibernateTemplate().save(enrollment);
+@@ -317,6 +321,7 @@ public class CourseManagementAdministrationHibernateImpl extends
+ 			enrollment.setCredits(credits);
+ 			enrollment.setGradingScheme(gradingScheme);
+ 			enrollment.setDropped(false);
++			enrollment.setDropDate(dropDate);
+ 			
+ 			enrollment.setLastModifiedBy(authn.getUserEid());
+ 			enrollment.setLastModifiedDate(new Date());
+diff --git a/reference/docs/conversion/sakai_11_mysql_conversion.sql b/reference/docs/conversion/sakai_11_mysql_conversion.sql
+index 0cd83e0..7af7d07 100644
+--- a/reference/docs/conversion/sakai_11_mysql_conversion.sql
++++ b/reference/docs/conversion/sakai_11_mysql_conversion.sql
+@@ -298,3 +298,6 @@ INSERT INTO SAKAI_REALM_RL_FN VALUES((select REALM_KEY from SAKAI_REALM where RE
+ INSERT INTO SAKAI_REALM_RL_FN VALUES((select REALM_KEY from SAKAI_REALM where REALM_ID = '!site.roles'), (select ROLE_KEY from SAKAI_REALM_ROLE where ROLE_NAME = '.auth'), (select FUNCTION_KEY from SAKAI_REALM_FUNCTION where FUNCTION_NAME = 'mail.read'));
+ INSERT INTO SAKAI_REALM_RL_FN VALUES((select REALM_KEY from SAKAI_REALM where REALM_ID = '!site.roles'), (select ROLE_KEY from SAKAI_REALM_ROLE where ROLE_NAME = '.auth'), (select FUNCTION_KEY from SAKAI_REALM_FUNCTION where FUNCTION_NAME = 'rwiki.read'));
+ INSERT INTO SAKAI_REALM_RL_FN VALUES((select REALM_KEY from SAKAI_REALM where REALM_ID = '!site.roles'), (select ROLE_KEY from SAKAI_REALM_ROLE where ROLE_NAME = '.auth'), (select FUNCTION_KEY from SAKAI_REALM_FUNCTION where FUNCTION_NAME = 'site.visit'));
++
++-- SAK-29432 Add dropDate field to Enrollment
++ALTER TABLE CM_ENROLLMENT_T ADD COLUMN DROP_DATE DATE;
+diff --git a/reference/docs/conversion/sakai_11_oracle_conversion.sql b/reference/docs/conversion/sakai_11_oracle_conversion.sql
+index b712756..26c11e1 100644
+--- a/reference/docs/conversion/sakai_11_oracle_conversion.sql
++++ b/reference/docs/conversion/sakai_11_oracle_conversion.sql
+@@ -302,3 +302,6 @@ INSERT INTO SAKAI_REALM_RL_FN VALUES((select REALM_KEY from SAKAI_REALM where RE
+ INSERT INTO SAKAI_REALM_RL_FN VALUES((select REALM_KEY from SAKAI_REALM where REALM_ID = '!site.roles'), (select ROLE_KEY from SAKAI_REALM_ROLE where ROLE_NAME = '.auth'), (select FUNCTION_KEY from SAKAI_REALM_FUNCTION where FUNCTION_NAME = 'mail.read'));
+ INSERT INTO SAKAI_REALM_RL_FN VALUES((select REALM_KEY from SAKAI_REALM where REALM_ID = '!site.roles'), (select ROLE_KEY from SAKAI_REALM_ROLE where ROLE_NAME = '.auth'), (select FUNCTION_KEY from SAKAI_REALM_FUNCTION where FUNCTION_NAME = 'rwiki.read'));
+ INSERT INTO SAKAI_REALM_RL_FN VALUES((select REALM_KEY from SAKAI_REALM where REALM_ID = '!site.roles'), (select ROLE_KEY from SAKAI_REALM_ROLE where ROLE_NAME = '.auth'), (select FUNCTION_KEY from SAKAI_REALM_FUNCTION where FUNCTION_NAME = 'site.visit'));
++
++-- SAK-29432 Add dropDate field to Enrollment
++ALTER TABLE CM_ENROLLMENT_T ADD COLUMN DROP_DATE DATE;
