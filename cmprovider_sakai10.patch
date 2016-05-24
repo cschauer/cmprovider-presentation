@@ -1,3 +1,15 @@
+diff --git a/pom.xml b/pom.xml
+index ec0b9c5..d63262c 100644
+--- a/pom.xml
++++ b/pom.xml
+@@ -59,6 +59,7 @@
+                 <module>calendar</module>
+                 <module>chat</module>
+                 <module>citations</module>
++                <module>cmprovider</module>
+                 <module>common</module>
+                 <module>config</module>
+                 <module>content</module>
 diff --git a/cmprovider/pom.xml b/cmprovider/pom.xml
 index 0f3099f..31cf345 100644
 --- a/cmprovider/pom.xml
