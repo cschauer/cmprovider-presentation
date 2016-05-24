@@ -14,14 +14,27 @@ class: center, middle
 .footnote[Texas State University]
 
 ---
+.center[
+# Agenda
+]
+
+.bigbox.no-border[
+- Overview of Course Management in Sakai
+- Details of cmprovider API
+- Future cmprovider improvements
+- Detailed look at how Texas State syncs course data from Banner
+]
+
+---
 
 .center[
 # Course Management in Sakai
 ]
 
 .bigbox.no-border[
+- Purpose is to get enrollments into Sakai to automatically add users to sites
 - Course Management API (/edu-services/cm-service)
-- CourseManagementService (read-only) and CourseManagementAdministration
+- CourseManagementService and CourseManagementAdministration
 - Site info, Roster, Worksite Setup, Section Info
 - Very helpful documentation at [Sakai Wiki](https://confluence.sakaiproject.org/display/SAKDEV/Course+Management+Integration)
 ]
@@ -36,6 +49,7 @@ class: center
 ???
 Work backwards from Enrollment
 Get student enrollments from registrar, report final grades back to registrar
+Overall, a way of tying student enrollments to courses with a time sensitive context (i.e. term)
 
 ---
 
@@ -44,13 +58,6 @@ class: center
 # Courses at Texas State
 
 ![Default-aligned image](images/txstate.svg)
-
-???
-AcademicSession = Semester (Fall, Spring, Summer I and II)
-CanonicalCourse = Base course (e.g. US1100)
-CourseOffering = Course for a semester (e.g. US1100 Fall 2016)
-EnrollmentSet = Single section of a course (e.g. US1100 Fall 2016 Section 12)
-Enrollment = Student's enrollment in a section
 
 ---
 
@@ -65,6 +72,12 @@ Enrollment = Student's enrollment in a section
 - Custom web services
 ]
 
+???
+Quartz job - Our old method, nightly, slow response for user. More frequent Quartz job might be better?
+Re-implementation - Write own implementation of interfaces in cm-service, do whatever
+Hibernate re-mapping - Fine if you have control over data source, risky if you don't. Not an option for many (most?)
+Custom web services - Other solutions similar to cmprovider
+
 ---
 
 .left-column[
@@ -78,6 +91,7 @@ Enrollment = Student's enrollment in a section
 - Endpoints found at /direct/cm-*
 - Wrapper around CourseManagementService and CourseManagementAdministration
 - POST or PUT for update/create
+- POST, PUT, and DELETE require sessionid or csrf token
 ]
 ]
 
@@ -112,6 +126,40 @@ Enrollment = Student's enrollment in a section
 .left-column[
   ### Cmprovider
   #### Academic Session
+]
+
+.right-column[
+  .label[Methods]
+  .classdef[
+  | URL | Method |
+  |---- | ------ |
+  | /direct/cm-academic-session/{eid}.json | GET    |
+  | /direct/cm-academic-session.json | POST\PUT |
+  | /direct/cm-academic-session/{eid}.json | DELETE |
+  | /direct/cm-academic-session/setCurrentAcademicSessions | PUT |
+  ]
+
+  .note[setCurrentAcademicSessions sets the sessions that can be used for new course sites]
+
+  .label[Sample JSON]
+  .classdef[
+  ```json
+{
+  "eid": "201515",
+  "title": "Test",
+  "description": "Test term for validation",
+  "endDate": "2015-05-30",
+  "startDate": "2015-01-01"
+}
+  ```
+  ]
+]
+
+---
+
+.left-column[
+  ### Cmprovider
+  #### Academic Session
   #### Canonical Course
 ]
 
@@ -136,6 +184,36 @@ Enrollment = Student's enrollment in a section
   ### Cmprovider
   #### Academic Session
   #### Canonical Course
+]
+
+.right-column[
+  .label[Methods]
+  .classdef[
+  | URL | Method |
+  |---- | ------ |
+  | /direct/cm-canonical-course/{eid}.json | GET    |
+  | /direct/cm-canonical-course.json | POST\PUT
+  | /direct/cm-canonical-course/{eid}.json | DELETE |
+  ]
+
+  .label[Sample JSON]
+  .classdef[
+  ```json
+{
+  "eid": "US1100",
+  "title": "US1100",
+  "description": "US100 Description"
+}
+  ```
+  ]
+]
+
+---
+
+.left-column[
+  ### Cmprovider
+  #### Academic Session
+  #### Canonical Course
   #### Course Offering
 ]
 
@@ -148,7 +226,7 @@ Enrollment = Student's enrollment in a section
   .classdef[
   | Field           | Type            | Notes | 
   | -----------     | ------          | ----- |
-  | eid             | String          | |
+  | eid             | String          | Use {term eid}.{course eid}, e.g. 201610.US1100 |
   | title           | String          | |
   | description     | String          | |
   | academicSession | String          | eid of AcademicSession |
@@ -156,6 +234,44 @@ Enrollment = Student's enrollment in a section
   | status          | String          | |
   | startDate       | Date            | YYYY-MM-DD |
   | endDate         | Date            | YYYY-MM-DD |
+  ]
+]
+
+---
+
+.left-column[
+  ### Cmprovider
+  #### Academic Session
+  #### Canonical Course
+  #### Course Offering
+]
+
+.right-column[
+  .label[Methods]
+  .classdef[
+  | URL | Method |
+  |---- | ------ |
+  | /direct/cm-course-offering/{eid}.json | GET    |
+  | /direct/cm-course-offering.json | POST\PUT |
+  | /direct/cm-course-offering/{eid}.json | DELETE |
+  | /direct/cm-course-offering/membership | PUT |
+  | /direct/cm-course-offering/membership | DELETE |
+  ]
+
+  .label[Sample JSON]
+  .classdef[
+  ```json
+{
+  "eid": "201510.US1100",
+  "title": "US1100 Fall 2014",
+  "description": "US1100 Description",
+  "academicSession": "201510",
+  "canonicalCourse": "US1100",
+  "status": "nostatus",
+  "endDate": "2015-05-30",
+  "startDate": "2015-01-01"
+}
+  ```
   ]
 ]
 
@@ -195,6 +311,41 @@ Enrollment = Student's enrollment in a section
   #### Canonical Course
   #### Course Offering
   #### Course Set
+]
+
+.right-column[
+  .label[Methods]
+  .classdef[
+  | URL | Method |
+  |---- | ------ |
+  | /direct/cm-course-set/{eid}.json | GET |
+  | /direct/cm-course-set.json | POST\PUT |
+  | /direct/cm-course-set/{eid}.json | DELETE |
+  | /direct/cm-course-set/membership | PUT |
+  | /direct/cm-course-set/membership | DELETE |
+  ]
+
+  .label[Sample JSON]
+  .classdef[
+  ```json
+{
+  "eid": "csdept",
+  "title": "Computer Science",
+  "description": "All Computer Science courses",
+  "category": "department",
+}
+  ```
+  ]
+]
+
+---
+
+.left-column[
+  ### Cmprovider
+  #### Academic Session
+  #### Canonical Course
+  #### Course Offering
+  #### Course Set
   #### Enrollment
 ]
 
@@ -216,6 +367,42 @@ Enrollment = Student's enrollment in a section
   | gradingScheme | String        | |
   | dropDate      | Date          | YYYY-MM-DD |
   | dropped       | Boolean       | &nbsp; |
+  ]
+]
+
+---
+
+.left-column[
+  ### Cmprovider
+  #### Academic Session
+  #### Canonical Course
+  #### Course Offering
+  #### Course Set
+  #### Enrollment
+]
+
+.right-column[
+  .label[Methods]
+  .classdef[
+  | URL | Method |
+  |---- | ------ |
+  | /direct/cm-enrollment.json | GET |
+  | /direct/cm-enrollment.json | POST/PUT |
+  ]
+
+  .note[Set dropped=true and dropDate to drop an enrollment]
+
+  .label[Sample JSON]
+  .classdef[
+  ```json
+{
+  "userId": "crs142",
+  "enrollmentSet": "201510.US1100.045",
+  "status": "true",
+  "credits": "03:00:00",
+  "gradingScheme": "noscheme"
+}
+  ```
   ]
 ]
 
@@ -272,7 +459,7 @@ Enrollment = Student's enrollment in a section
   .classdef[
   | Field               | Type         | Notes | 
   | -----------         | ------       | ----- |
-  | eid                 | String       | |
+  | eid                 | String       | {term eid}.{course eid}.{section num}, e.g. 201610.US1100.15 |
   | title               | String       | |
   | description         | String       | |
   | category            | String       | |
@@ -280,6 +467,45 @@ Enrollment = Student's enrollment in a section
   | courseOffering      | String       | |
   | officialInstructors | List &lt; String &gt; | &nbsp; |
 
+  ]
+]
+
+---
+
+.left-column[
+  ### Cmprovider
+  #### Academic Session
+  #### Canonical Course
+  #### Course Offering
+  #### Course Set
+  #### Enrollment
+  #### Membership
+  #### Enrollment Set
+]
+
+.right-column[
+  .label[Methods]
+  .classdef[
+  | URL | Method |
+  |---- | ------ |
+  | /direct/cm-enrollmen-set/{eid}.json | GET |
+  | /direct/cm-enrollmen-set.json | POST/PUT |
+  | /direct/cm-enrollmen-set/{eid}.json | DELETE |
+  ]
+
+  .label[Sample JSON]
+  .classdef[
+  ```json
+{
+  "eid": "201510.US1100.045",
+  "courseOffering": "201510.US1100",
+  "title": "US1100 Fall 2014 Section 45",
+  "description": "US1100 Descriptions",
+  "category": "lect",
+  "defaultCredits": "03:00:00",
+  "officialInstructors": [ "admin", "crs142" ]
+}
+  ```
   ]
 ]
 
@@ -307,7 +533,7 @@ Enrollment = Student's enrollment in a section
   .classdef[
   | Field          | Type    | Notes | 
   | -----------    | ------  | ----- |
-  | eid            | String  | |
+  | eid            | String  | We use the same eid for enrollment sets and sections, YMMV|
   | title          | String  | |
   | description    | String  | |
   | category       | String  | |
@@ -316,6 +542,48 @@ Enrollment = Student's enrollment in a section
   | maxSize        | Integer | |
   | parent         | String  | eid of another Section |
 
+  ]
+]
+
+---
+
+.left-column[
+  ### Cmprovider
+  #### Academic Session
+  #### Canonical Course
+  #### Course Offering
+  #### Course Set
+  #### Enrollment
+  #### Membership
+  #### Enrollment Set
+  #### Section
+]
+
+.right-column[
+  .label[Methods]
+  .classdef[
+  | URL | Method |
+  |---- | ------ |
+  | /direct/cm-section/{eid}.json | GET |
+  | /direct/cm-section.json | POST/PUT |
+  | /direct/cm-section/{eid}.json | DELETE |
+  | /direct/cm-section/membership | PUT |
+  | /direct/cm-section/membership | DELETE |
+  ]
+
+  .label[Sample JSON]
+  .classdef[
+  ```json
+{
+  "eid": "201510.US1100.045",
+  "courseOffering": "201510.US1100",
+  "enrollmentSet": "201510.US1100.045",
+  "title": "US1100 Fall 2014 Section 45",
+  "description": "US1100 Description",
+  "category": "lect",
+  "maxSize": 100
+}
+  ```
   ]
 ]
 
@@ -337,6 +605,7 @@ class: center, middle
 - More flexibility
 - Easier to add custom actions
 - Annotations (JAX-RS) vs. Inheritence (Entity Provider)
+- Documentation at [Jersey site](https://jersey.java.net/documentation/latest)
 ]
 ]
 
@@ -383,7 +652,7 @@ public class AcademicSessionEntityProvider {
 
 .right-column[
   
-  ### Similar for routing
+Similar for routing
   
   .label[Entity Provider]
 
@@ -401,7 +670,8 @@ public class AcademicSessionEntityProvider implements RESTful, CoreEntityProvide
 @Path("cm-academic-session")
 public class AcademicSessionEntityProvider {
     @GET
-    public AcademicSessionData getAcademicSession(String eid) { ... }
+    @Path("/{eid}")
+    public AcademicSessionData getAcademicSession(@PathParam("eid")String eid) { ... }
 
     @POST
     @PUT
@@ -416,11 +686,41 @@ public class AcademicSessionEntityProvider {
   ### JAX RS
  #### Auto-registration
  #### Routing
- #### Validation
+ #### Filters
 ]
 
 .right-column[
-Some stuff on validation annotations
+.small[
+Set up filters to run before methods are called using @NameBinding
+]
+```java
+@NameBinding
+@Retention(RetentionPolicy.RUNTIME)
+@Target({ElementType.TYPE, ElementType.METHOD})
+public @interface AdminOnly {}
+```
+```java
+@AdminOnly
+public class RequireAdminFilter implements ContainerRequestFilter {
+
+  @Autowired
+  protected SecurityService securityService;
+
+  @Override
+  public void filter(ContainerRequestContext context) throws IOException {
+    if (!securityService.isSuperUser()) {
+      context.abortWith(Response.status(Response.Status.UNAUTHORIZED).build());
+    }
+  }
+}
+```
+
+```java
+@AdminOnly
+public class AcademicSessionEntityProvider {
+  ...
+}
+```
 ]
 
 ---
@@ -429,22 +729,105 @@ Some stuff on validation annotations
 ### JAX RS
  #### Auto-registration
 #### Routing
+#### Filters
 #### Validation
+]
+
+.right-column[
+.label[Validation Annotations]
+
+```java
+@StartBeforeEndDate
+public class AcademicSessionData implements CmEntityData {
+  @NotNull
+  @Size(min=1)
+  public String eid;
+
+  @NotNull
+  public String title = "";
+  
+  @NotNull
+  public String description = "";
+  
+  public String startDate;
+  public String endDate;
+
+  ...
+}
+```
+]
+
+---
+
+.left-column[
+### JAX RS
+ #### Auto-registration
+#### Routing
+#### Filters
+#### Validation
+#### Custom Response
+]
+
+.right-column[
+.label[Response Types]
+.box[
+- Define response types using @Produces
+- Uses accept header from request
+- Entity provider used file extension at end of url
+]
+```java
+@GET
+@Produces({"application/xml", "application/json"})
+public AcademicSession getAcademicSession() { ... }
+```
+
+.label[Response builder]
+```java
+@GET
+public Response getCustomResponse() {
+  return Response.status(200)
+                 .entity("This is a message")
+                 .type("text/plain")
+                 .build();
+}
+```
+]
+---
+
+.left-column[
+### JAX RS
+ #### Auto-registration
+#### Routing
+#### Filters
+#### Validation
+#### Custom Response
 #### Error Handling
 ]
 
 .right-column[
-Exception mapping
+  .small[EntityProvider handles some exceptions for you and generates an error message.]
 
+  .label[Exception mapping]
   .classdef[
     | Java Exception           | Status Code |
     | --------------           | ----------- |
     | IllegalArgumentException | 400 |
     | SecurityException        | 403 |
-    | IdNotFoundException      | 404 |
+    | If method returns null   | 404 |
     | other exceptions         | 500 |
-
   ]
+
+  .label[JAX-RS]
+  ```java
+public class IdNotFoundMapper implements ExceptionMapper<IdNotFoundException> {
+  public Response toResponse(IdNotFoundException ex) {
+    return Response.status(404)
+                   .entity(ex.getMessage())
+                   .type("text/plain")
+                   .build();
+  }
+}
+  ```
 ]
 
 ---
@@ -453,23 +836,10 @@ Exception mapping
 ### JAX RS
  #### Auto-registration
 #### Routing
+#### Filters
 #### Validation
-#### Error Handling
 #### Custom Response
-]
-
-.right-column[
-Example of custom response in JAX-RS
-]
----
-
-.left-column[
-### JAX RS
- #### Auto-registration
-#### Routing
-#### Validation
 #### Error Handling
-#### Custom Response
 #### Documentation
 ]
 

@@ -109,6 +109,7 @@ li {
 
 img {
   max-width: 100%;
+  border: 20px solid white;
 }
 
 .right.footnote {
@@ -135,6 +136,7 @@ a, a:visited {
   border-radius: 4px;
   padding: 10px 5px;
   border: 1px solid #ccc;
+  font-size: 28px;
 }
 
 .bigbox li {
@@ -143,4 +145,13 @@ a, a:visited {
 
 .no-border {
   border: none !important;
+}
+
+.small {
+  font-size: 20px;
+}
+
+.note {
+  font-size: 20px;
+  color: #deb407;
 }
